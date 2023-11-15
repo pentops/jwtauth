@@ -4,60 +4,82 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/pentops/log.go/log"
-	"github.com/pquerna/cachecontrol/cacheobject"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/square/go-jose.v2"
 )
 
-type KeySource interface {
-	Refresh(ctx context.Context) (time.Duration, error)
-	Keys() []jose.JSONWebKey
-}
-
 // JWKSManager merges multiple JWKS sources
 type JWKSManager struct {
-	servers     []KeySource
-	jwksBytes   []byte
-	mutex       sync.RWMutex
-	jwksMutex   sync.RWMutex
-	initialLoad chan error
+	servers           []KeySource
+	jwksBytes         []byte
+	mutex             sync.RWMutex
+	jwksMutex         sync.RWMutex
+	initialLoad       chan error
+	DefaultHTTPClient *http.Client
 }
 
 func NewKeyManager(sources ...KeySource) *JWKSManager {
 	ss := &JWKSManager{
 		servers:   sources,
 		jwksBytes: []byte(`{"keys":[]}`),
+		DefaultHTTPClient: &http.Client{
+			Timeout: time.Second * 5,
+		},
 	}
 	return ss
 }
 
-func NewKeyManagerFromURLs(urls ...string) (*JWKSManager, error) {
-	servers := make([]KeySource, len(urls))
+func (km *JWKSManager) AddSources(source ...KeySource) {
+	km.mutex.RLock()
+	defer km.mutex.RUnlock()
+	km.servers = append(km.servers, source...)
+}
 
-	client := &http.Client{
-		Timeout: time.Second * 5,
-	}
-	for idx, url := range urls {
+func (km *JWKSManager) AddSourceFromURLs(urls ...string) error {
+	sources := make([]KeySource, 0, len(urls))
+	for _, url := range urls {
 		server := &HTTPKeySource{
-			client: client,
+			client: km.DefaultHTTPClient,
 			url:    url,
 		}
-		servers[idx] = server
+		sources = append(sources, server)
+	}
+	km.AddSources(sources...)
+	return nil
+}
+
+func keyIsValidForJWKS(key jose.JSONWebKey) error {
+	if key.KeyID == "" {
+		return fmt.Errorf("Key has no key ID")
+	}
+	if !key.Valid() {
+		return fmt.Errorf("Key %s is not valid", key.KeyID)
+	}
+	if !key.IsPublic() {
+		return fmt.Errorf("Key %s is not public", key.KeyID)
+	}
+	return nil
+}
+
+func (km *JWKSManager) AddKeys(keys ...jose.JSONWebKey) error {
+	for idx, key := range keys {
+		if err := keyIsValidForJWKS(key); err != nil {
+			return fmt.Errorf("Key %d: %w", idx, err)
+		}
 	}
 
-	ss := &JWKSManager{
-		servers:     servers,
-		jwksBytes:   []byte(`{"keys":[]}`),
-		initialLoad: make(chan error),
+	keySource := &StaticKeySource{
+		KeySet: jose.JSONWebKeySet{
+			Keys: keys,
+		},
 	}
-
-	return ss, nil
+	km.AddSources(keySource)
+	return nil
 }
 
 // WaitForKeys blocks until the load of keys has completed at least once
@@ -68,36 +90,6 @@ func (km *JWKSManager) WaitForKeys(ctx context.Context) error {
 
 func (km *JWKSManager) logError(ctx context.Context, err error) {
 	log.WithError(ctx, err).Error("Failed to load JWKS")
-}
-
-// ServeJWKS serves the JWKS on the given address with basic plaintext configs,
-// for use behind a load balancer etc. For more control, use ServeHTTP in your
-// own server, or the JWKS() method into any other server
-func (km *JWKSManager) ServeJWKS(ctx context.Context, addr string) error {
-	srv := http.Server{
-		Addr:    addr,
-		Handler: km,
-	}
-
-	go func() {
-		<-ctx.Done()
-		srv.Close()
-	}()
-
-	return srv.ListenAndServe()
-}
-
-func (km *JWKSManager) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	if req.URL.Path != "/.well-known/jwks.json" {
-		http.Error(w, "Not Found", http.StatusNotFound)
-		return
-	}
-
-	jwksBytes := km.JWKS()
-	_, err := w.Write(jwksBytes)
-	if err != nil {
-		log.WithError(req.Context(), err).Error("Failed to write JWKS Response")
-	}
 }
 
 // Run fetches once from each source, then refreshes the keys based on cache
@@ -193,81 +185,33 @@ func (km *JWKSManager) GetKeys(keyID string) ([]jose.JSONWebKey, error) {
 	return keys, nil
 }
 
-func (km *JWKSManager) AddSource(source KeySource) {
-	km.mutex.RLock()
-	defer km.mutex.RUnlock()
-	km.servers = append(km.servers, source)
+// ServeJWKS serves the JWKS on the given address with basic plaintext configs,
+// for use behind a load balancer etc. For more control, use ServeHTTP in your
+// own server, or the JWKS() method into any other server
+func (km *JWKSManager) ServeJWKS(ctx context.Context, addr string) error {
+	<-km.initialLoad
+	srv := http.Server{
+		Addr:    addr,
+		Handler: km,
+	}
+
+	go func() {
+		<-ctx.Done()
+		srv.Close()
+	}()
+
+	return srv.ListenAndServe()
 }
 
-type DirectKeySource struct {
-	KeySet jose.JSONWebKeySet
-}
+func (km *JWKSManager) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if req.URL.Path != "/.well-known/jwks.json" {
+		http.Error(w, "Not Found", http.StatusNotFound)
+		return
+	}
 
-func (ss *DirectKeySource) Keys() []jose.JSONWebKey {
-	return ss.KeySet.Keys
-}
-
-func (ss *DirectKeySource) Refresh(ctx context.Context) (time.Duration, error) {
-	return time.Hour, nil
-}
-
-type HTTPKeySource struct {
-	keyset *jose.JSONWebKeySet
-	url    string
-	client *http.Client
-	lock   sync.RWMutex
-}
-
-func (ss *HTTPKeySource) Keys() []jose.JSONWebKey {
-	ss.lock.RLock()
-	defer ss.lock.RUnlock()
-	return ss.keyset.Keys
-}
-
-func (ss *HTTPKeySource) Refresh(ctx context.Context) (time.Duration, error) {
-	req, err := http.NewRequest("GET", ss.url, nil)
+	jwksBytes := km.JWKS()
+	_, err := w.Write(jwksBytes)
 	if err != nil {
-		return 0, err
+		log.WithError(req.Context(), err).Error("Failed to write JWKS Response")
 	}
-
-	res, err := ss.client.Do(req)
-	if err != nil {
-		return 0, fmt.Errorf("GET %s: %w", ss.url, err)
-	}
-
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("GET %s: %s", ss.url, res.Status)
-	}
-
-	bodyBytes, err := io.ReadAll(res.Body)
-	if err != nil {
-		return 0, fmt.Errorf("GET %s: %w", ss.url, err)
-	}
-
-	keyset := &jose.JSONWebKeySet{}
-
-	if err := json.Unmarshal(bodyBytes, keyset); err != nil {
-		return 0, fmt.Errorf("Parsing %s: %w", ss.url, err)
-	}
-
-	refreshTime := parseCacheControlHeader(res.Header.Get("Cache-Control"))
-
-	ss.lock.Lock()
-	defer ss.lock.Unlock()
-	ss.keyset = keyset
-	return refreshTime, nil
-}
-
-func parseCacheControlHeader(raw string) time.Duration {
-	respDir, err := cacheobject.ParseResponseCacheControl(raw)
-	if err != nil || respDir.NoCachePresent || respDir.NoStore || respDir.PrivatePresent {
-		return time.Second * 30
-	}
-	if respDir.MaxAge > 0 {
-		return time.Duration(respDir.MaxAge) * time.Second
-	}
-
-	return time.Second * 30
 }
