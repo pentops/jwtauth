@@ -7,7 +7,6 @@ require (
 	github.com/pquerna/cachecontrol v0.2.0
 	golang.org/x/sync v0.3.0
 	google.golang.org/grpc v1.59.0
-	gopkg.daemonl.com/log v0.0.13
 	gopkg.in/square/go-jose.v2 v2.6.0
 )
 
