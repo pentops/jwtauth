@@ -40,7 +40,7 @@ func (km *JWKSManager) AddSources(source ...KeySource) {
 	km.servers = append(km.servers, source...)
 }
 
-func (km *JWKSManager) AddSourceFromURLs(urls ...string) error {
+func (km *JWKSManager) AddSourceURLs(urls ...string) error {
 	sources := make([]KeySource, 0, len(urls))
 	for _, url := range urls {
 		server := &HTTPKeySource{
@@ -66,7 +66,7 @@ func keyIsValidForJWKS(key jose.JSONWebKey) error {
 	return nil
 }
 
-func (km *JWKSManager) AddKeys(keys ...jose.JSONWebKey) error {
+func (km *JWKSManager) AddPublicKeys(keys ...jose.JSONWebKey) error {
 	for idx, key := range keys {
 		if err := keyIsValidForJWKS(key); err != nil {
 			return fmt.Errorf("Key %d: %w", idx, err)
