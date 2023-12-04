@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pentops/log.go/log"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/square/go-jose.v2"
@@ -21,6 +22,8 @@ type JWKSManager struct {
 	jwksMutex         sync.RWMutex
 	initialLoad       chan error
 	DefaultHTTPClient *http.Client
+
+	id string
 }
 
 func NewKeyManager(sources ...KeySource) *JWKSManager {
@@ -30,23 +33,22 @@ func NewKeyManager(sources ...KeySource) *JWKSManager {
 		DefaultHTTPClient: &http.Client{
 			Timeout: time.Second * 5,
 		},
+		initialLoad: make(chan error),
+		id:          uuid.NewString(),
 	}
 	return ss
 }
 
 func (km *JWKSManager) AddSources(source ...KeySource) {
-	km.mutex.RLock()
-	defer km.mutex.RUnlock()
+	km.mutex.Lock()
+	defer km.mutex.Unlock()
 	km.servers = append(km.servers, source...)
 }
 
 func (km *JWKSManager) AddSourceURLs(urls ...string) error {
 	sources := make([]KeySource, 0, len(urls))
 	for _, url := range urls {
-		server := &HTTPKeySource{
-			client: km.DefaultHTTPClient,
-			url:    url,
-		}
+		server := NewHTTPKeySource(km.DefaultHTTPClient, url)
 		sources = append(sources, server)
 	}
 	km.AddSources(sources...)
@@ -88,14 +90,11 @@ func (km *JWKSManager) WaitForKeys(ctx context.Context) error {
 	return <-km.initialLoad
 }
 
-func (km *JWKSManager) logError(ctx context.Context, err error) {
-	log.WithError(ctx, err).Error("Failed to load JWKS")
-}
-
 // Run fetches once from each source, then refreshes the keys based on cache
 // control headers. If the initial load fails repeatedly this will exit with an
 // error
 func (km *JWKSManager) Run(ctx context.Context) error {
+	log.Debug(ctx, "JWKS Running")
 	initGroup := sync.WaitGroup{}
 	eg, ctx := errgroup.WithContext(ctx)
 	for _, server := range km.servers {
@@ -113,7 +112,7 @@ func (km *JWKSManager) Run(ctx context.Context) error {
 				case <-time.After(duration):
 					duration, err = server.Refresh(ctx)
 					if err != nil {
-						km.logError(ctx, err)
+						log.WithError(ctx, err).Error("fetching JWKS")
 						errorCount++
 						if !loadedOnce && errorCount > 5 {
 							return err

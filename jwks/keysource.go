@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pentops/log.go/log"
 	"github.com/pquerna/cachecontrol/cacheobject"
 	"gopkg.in/square/go-jose.v2"
 )
@@ -37,9 +38,21 @@ type HTTPKeySource struct {
 	lock   sync.RWMutex
 }
 
+func NewHTTPKeySource(client *http.Client, url string) *HTTPKeySource {
+	return &HTTPKeySource{
+		url:    url,
+		client: client,
+		keyset: &jose.JSONWebKeySet{},
+		lock:   sync.RWMutex{},
+	}
+}
+
 func (ss *HTTPKeySource) Keys() []jose.JSONWebKey {
 	ss.lock.RLock()
 	defer ss.lock.RUnlock()
+	if ss.keyset == nil {
+		return nil
+	}
 	return ss.keyset.Keys
 }
 
@@ -72,6 +85,15 @@ func (ss *HTTPKeySource) Refresh(ctx context.Context) (time.Duration, error) {
 	}
 
 	refreshTime := parseCacheControlHeader(res.Header.Get("Cache-Control"))
+
+	keyIDs := []string{}
+	for _, key := range keyset.Keys {
+		keyIDs = append(keyIDs, key.KeyID)
+	}
+	log.WithFields(ctx, map[string]interface{}{
+		"keys": keyIDs,
+		"url":  ss.url,
+	}).Info("Loaded keys")
 
 	ss.lock.Lock()
 	defer ss.lock.Unlock()
