@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/pentops/log.go/log"
-	"github.com/pentops/o5-runtime-sidecar/proxy"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"gopkg.in/square/go-jose.v2"
@@ -25,7 +24,9 @@ const (
 	VerifiedJWTHeader = "X-Verified-JWT"
 )
 
-func JWKSAuthFunc(jwks JWKS) proxy.AuthFunc {
+type AuthFunc func(context.Context, *http.Request) (map[string]string, error)
+
+func JWKSAuthFunc(jwks JWKS) AuthFunc {
 	return func(ctx context.Context, req *http.Request) (map[string]string, error) {
 
 		authHeader := req.Header.Get("Authorization")
