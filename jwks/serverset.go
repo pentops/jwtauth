@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/pentops/log.go/log"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/square/go-jose.v2"
@@ -16,14 +15,16 @@ import (
 
 // JWKSManager merges multiple JWKS sources
 type JWKSManager struct {
-	servers           []KeySource
-	jwksBytes         []byte
-	mutex             sync.RWMutex
-	jwksMutex         sync.RWMutex
+	servers   []KeySource
+	jwksBytes []byte
+
+	mutex     sync.RWMutex // Locks functions of the manager
+	jwksMutex sync.RWMutex // Locks the keys
+
 	initialLoad       chan error
 	DefaultHTTPClient *http.Client
 
-	id string
+	running bool
 }
 
 func NewKeyManager(sources ...KeySource) *JWKSManager {
@@ -33,8 +34,6 @@ func NewKeyManager(sources ...KeySource) *JWKSManager {
 		DefaultHTTPClient: &http.Client{
 			Timeout: time.Second * 5,
 		},
-		initialLoad: make(chan error),
-		id:          uuid.NewString(),
 	}
 	return ss
 }
@@ -87,13 +86,29 @@ func (km *JWKSManager) AddPublicKeys(keys ...jose.JSONWebKey) error {
 // WaitForKeys blocks until the load of keys has completed at least once
 // for each source.
 func (km *JWKSManager) WaitForKeys(ctx context.Context) error {
-	return <-km.initialLoad
+	km.mutex.RLock()
+	if !km.running {
+		km.mutex.RUnlock()
+		return fmt.Errorf("JWKSManager is not running")
+	}
+	ch := km.initialLoad
+	km.mutex.RUnlock()
+	return <-ch
 }
 
 // Run fetches once from each source, then refreshes the keys based on cache
 // control headers. If the initial load fails repeatedly this will exit with an
 // error
 func (km *JWKSManager) Run(ctx context.Context) error {
+	km.mutex.Lock()
+	if km.running {
+		km.mutex.Unlock()
+		return fmt.Errorf("JWKSManager is already running")
+	}
+	km.running = true
+	km.initialLoad = make(chan error)
+	km.mutex.Unlock()
+
 	log.Debug(ctx, "JWKS Running")
 	initGroup := sync.WaitGroup{}
 	eg, ctx := errgroup.WithContext(ctx)
@@ -188,7 +203,9 @@ func (km *JWKSManager) GetKeys(keyID string) ([]jose.JSONWebKey, error) {
 // for use behind a load balancer etc. For more control, use ServeHTTP in your
 // own server, or the JWKS() method into any other server
 func (km *JWKSManager) ServeJWKS(ctx context.Context, addr string) error {
-	<-km.initialLoad
+	if err := km.WaitForKeys(ctx); err != nil {
+		return err
+	}
 	srv := http.Server{
 		Addr:    addr,
 		Handler: km,
