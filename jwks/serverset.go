@@ -34,6 +34,7 @@ func NewKeyManager(sources ...KeySource) *JWKSManager {
 		DefaultHTTPClient: &http.Client{
 			Timeout: time.Second * 5,
 		},
+		initialLoad: make(chan error),
 	}
 	return ss
 }
@@ -86,14 +87,7 @@ func (km *JWKSManager) AddPublicKeys(keys ...jose.JSONWebKey) error {
 // WaitForKeys blocks until the load of keys has completed at least once
 // for each source.
 func (km *JWKSManager) WaitForKeys(ctx context.Context) error {
-	km.mutex.RLock()
-	if !km.running {
-		km.mutex.RUnlock()
-		return fmt.Errorf("JWKSManager is not running")
-	}
-	ch := km.initialLoad
-	km.mutex.RUnlock()
-	return <-ch
+	return <-km.initialLoad
 }
 
 // Run fetches once from each source, then refreshes the keys based on cache
@@ -106,7 +100,6 @@ func (km *JWKSManager) Run(ctx context.Context) error {
 		return fmt.Errorf("JWKSManager is already running")
 	}
 	km.running = true
-	km.initialLoad = make(chan error)
 	km.mutex.Unlock()
 
 	log.Debug(ctx, "JWKS Running")
