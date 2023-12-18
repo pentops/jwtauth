@@ -192,6 +192,32 @@ func (km *JWKSManager) GetKeys(keyID string) ([]jose.JSONWebKey, error) {
 	return keys, nil
 }
 
+type KeySummary struct {
+	Keys   []string `json:"keys"`
+	Source string   `json:"source"`
+}
+
+// KeySummary is designed to be used in log messages for debugging exceptions
+func (km *JWKSManager) KeyDebug() interface{} {
+	km.mutex.RLock()
+	defer km.mutex.RUnlock()
+	keys := make([]KeySummary, 0, 1)
+
+	for _, server := range km.servers {
+		serverKeys := server.Keys()
+		keyIDs := make([]string, 0, len(serverKeys))
+		for _, key := range serverKeys {
+			keyIDs = append(keyIDs, key.KeyID)
+		}
+		keys = append(keys, KeySummary{
+			Keys:   keyIDs,
+			Source: server.Name(),
+		})
+	}
+
+	return keys
+}
+
 // ServeJWKS serves the JWKS on the given address with basic plaintext configs,
 // for use behind a load balancer etc. For more control, use ServeHTTP in your
 // own server, or the JWKS() method into any other server

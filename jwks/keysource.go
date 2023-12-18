@@ -17,6 +17,7 @@ import (
 type KeySource interface {
 	Refresh(ctx context.Context) (time.Duration, error)
 	Keys() []jose.JSONWebKey
+	Name() string
 }
 
 type StaticKeySource struct {
@@ -25,6 +26,10 @@ type StaticKeySource struct {
 
 func (ss *StaticKeySource) Keys() []jose.JSONWebKey {
 	return ss.KeySet.Keys
+}
+
+func (ss *StaticKeySource) Name() string {
+	return "static"
 }
 
 func (ss *StaticKeySource) Refresh(ctx context.Context) (time.Duration, error) {
@@ -54,6 +59,10 @@ func (ss *HTTPKeySource) Keys() []jose.JSONWebKey {
 		return nil
 	}
 	return ss.keyset.Keys
+}
+
+func (ss *HTTPKeySource) Name() string {
+	return ss.url
 }
 
 func (ss *HTTPKeySource) Refresh(ctx context.Context) (time.Duration, error) {
