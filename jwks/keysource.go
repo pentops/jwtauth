@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -99,13 +100,29 @@ func (ss *HTTPKeySource) Refresh(ctx context.Context) (time.Duration, error) {
 	for _, key := range keyset.Keys {
 		keyIDs = append(keyIDs, key.KeyID)
 	}
-	log.WithFields(ctx, map[string]interface{}{
-		"keys": keyIDs,
-		"url":  ss.url,
-	}).Info("Loaded keys")
+	slices.Sort(keyIDs)
 
 	ss.lock.Lock()
 	defer ss.lock.Unlock()
+	changed := false
+	if ss.keyset == nil || len(ss.keyset.Keys) != len(keyset.Keys) {
+		changed = true
+	} else {
+		for i, key := range ss.keyset.Keys {
+			if key.KeyID != keyset.Keys[i].KeyID {
+				changed = true
+				break
+			}
+		}
+	}
+	if changed {
+		log.WithFields(ctx, map[string]interface{}{
+			"oldKeys": ss.keyset.Keys,
+			"newKeys": keyIDs,
+			"url":     ss.url,
+		}).Info("JWKS Client Loaded New keys")
+	}
+
 	ss.keyset = keyset
 	return refreshTime, nil
 }
