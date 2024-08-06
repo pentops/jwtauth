@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/pentops/log.go/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"github.com/pentops/log.go/log"
 
 	jose "gopkg.in/square/go-jose.v2"
 	"gopkg.in/square/go-jose.v2/jwt"
