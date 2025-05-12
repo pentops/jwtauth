@@ -21,6 +21,11 @@ runtimes:
         envVars:
           - name: "JWKS_ADDR"
             value: ":8081"
+
           - name: "PRIVATE_KEY"
             secret:
               secretName: "privateKey"
+
+          - name: "UPSTREAM_JWKS"
+            secret:
+              secretName: "upstreamJwks"
