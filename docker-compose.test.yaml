@@ -1,11 +1,7 @@
 services:
   test:
     image: golang:1.24
-    links:
-      - database
     volumes:
       - ".:/src"
-    environment:
-      TEST_DB: "postgres://test:test@database/test?sslmode=disable"
     working_dir: "/src"
     command: "go test ./..."
