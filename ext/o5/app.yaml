@@ -29,6 +29,5 @@ runtimes:
               jsonKey: "privateKey"
 
           - name: "UPSTREAM_JWKS"
-            secret:
-              secretName: "config"
-              jsonKey: "upstreamJwks"
+            fromEnv:
+              name: upstream-jwks
