@@ -26,7 +26,3 @@ runtimes:
           - name: "PRIVATE_KEY"
             secret:
               secretName: "privateKey"
-
-          - name: "UPSTREAM_JWKS"
-            secret:
-              secretName: "upstreamJwks"
