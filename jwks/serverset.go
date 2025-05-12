@@ -36,12 +36,14 @@ func NewKeyManager(sources ...KeySource) *JWKSManager {
 		},
 		initialLoad: make(chan error),
 	}
+
 	return ss
 }
 
 func (km *JWKSManager) AddSources(source ...KeySource) {
 	km.mutex.Lock()
 	defer km.mutex.Unlock()
+
 	km.servers = append(km.servers, source...)
 }
 
@@ -51,7 +53,9 @@ func (km *JWKSManager) AddSourceURLs(urls ...string) error {
 		server := NewHTTPKeySource(km.DefaultHTTPClient, url)
 		sources = append(sources, server)
 	}
+
 	km.AddSources(sources...)
+
 	return nil
 }
 
@@ -59,12 +63,15 @@ func keyIsValidForJWKS(key jose.JSONWebKey) error {
 	if key.KeyID == "" {
 		return fmt.Errorf("Key has no key ID")
 	}
+
 	if !key.Valid() {
 		return fmt.Errorf("Key %s is not valid", key.KeyID)
 	}
+
 	if !key.IsPublic() {
 		return fmt.Errorf("Key %s is not public", key.KeyID)
 	}
+
 	return nil
 }
 
@@ -80,7 +87,9 @@ func (km *JWKSManager) AddPublicKeys(keys ...jose.JSONWebKey) error {
 			Keys: keys,
 		},
 	}
+
 	km.AddSources(keySource)
+
 	return nil
 }
 
@@ -99,11 +108,13 @@ func (km *JWKSManager) Run(ctx context.Context) error {
 		km.mutex.Unlock()
 		return fmt.Errorf("JWKSManager is already running")
 	}
+
 	km.running = true
 	km.mutex.Unlock()
 
 	log.Debug(ctx, "JWKS Running")
 	initGroup := sync.WaitGroup{}
+
 	eg, ctx := errgroup.WithContext(ctx)
 	for _, server := range km.servers {
 		server := server
@@ -151,11 +162,11 @@ func (km *JWKSManager) Run(ctx context.Context) error {
 func (km *JWKSManager) mergeKeys() {
 	km.jwksMutex.Lock()
 	defer km.jwksMutex.Unlock()
+
 	keys := make([]jose.JSONWebKey, 0, 1)
 
 	for _, server := range km.servers {
-		serverKeys := server.Keys()
-		keys = append(keys, serverKeys...)
+		keys = append(keys, server.Keys()...)
 	}
 
 	keySet := jose.JSONWebKeySet{
@@ -166,23 +177,25 @@ func (km *JWKSManager) mergeKeys() {
 	if err != nil {
 		return
 	}
+
 	km.jwksBytes = keyBytes
 }
 
 func (km *JWKSManager) JWKS() []byte {
 	km.jwksMutex.RLock()
 	defer km.jwksMutex.RUnlock()
+
 	return km.jwksBytes
 }
 
 func (km *JWKSManager) GetKeys(keyID string) ([]jose.JSONWebKey, error) {
 	km.mutex.RLock()
 	defer km.mutex.RUnlock()
+
 	keys := make([]jose.JSONWebKey, 0, 1)
 
 	for _, server := range km.servers {
-		serverKeys := server.Keys()
-		for _, key := range serverKeys {
+		for _, key := range server.Keys() {
 			if key.KeyID == keyID {
 				keys = append(keys, key)
 			}
@@ -206,9 +219,11 @@ func (km *JWKSManager) KeyDebug() interface{} {
 	for _, server := range km.servers {
 		serverKeys := server.Keys()
 		keyIDs := make([]string, 0, len(serverKeys))
+
 		for _, key := range serverKeys {
 			keyIDs = append(keyIDs, key.KeyID)
 		}
+
 		keys = append(keys, KeySummary{
 			Keys:   keyIDs,
 			Source: server.Name(),
@@ -225,6 +240,7 @@ func (km *JWKSManager) ServeJWKS(ctx context.Context, addr string) error {
 	if err := km.WaitForKeys(ctx); err != nil {
 		return err
 	}
+
 	srv := http.Server{
 		Addr:    addr,
 		Handler: km,
@@ -244,8 +260,7 @@ func (km *JWKSManager) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	jwksBytes := km.JWKS()
-	_, err := w.Write(jwksBytes)
+	_, err := w.Write(km.JWKS())
 	if err != nil {
 		log.WithError(req.Context(), err).Error("Failed to write JWKS Response")
 	}

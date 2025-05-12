@@ -1,0 +1,34 @@
+---
+name: "jwks"
+
+secrets:
+  - name: 'config'
+
+runtimes:
+  - name: main
+    routes:
+      - prefix: "/.well-known/"
+        protocol: ROUTE_PROTOCOL_HTTP
+        bypassIngress: true
+        port: 8081
+
+    containers:
+      - name: main
+        demand: DEMAND_LIGHT
+        image:
+          name: jwks
+          registry: ghcr.io/pentops
+        command: [serve]
+        envVars:
+          - name: "JWKS_ADDR"
+            value: ":8081"
+
+          - name: "PRIVATE_KEY"
+            secret:
+              secretName: "config"
+              jsonKey: "privateKey"
+
+          - name: "UPSTREAM_JWKS"
+            secret:
+              secretName: "config"
+              jsonKey: "upstreamJwks"
