@@ -17,6 +17,7 @@ runtimes:
         demand: DEMAND_LIGHT
         image:
           name: jwks
+          registry: ghcr.io/pentops
         command: [serve]
         envVars:
           - name: "JWKS_ADDR"
