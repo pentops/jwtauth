@@ -3,6 +3,7 @@ name: "jwks"
 
 secrets:
   - name: 'privateKey'
+  - name: 'upstreamJwks'
 
 runtimes:
   - name: main
@@ -26,3 +27,7 @@ runtimes:
           - name: "PRIVATE_KEY"
             secret:
               secretName: "privateKey"
+
+          - name: "UPSTREAM_JWKS"
+            secret:
+              secretName: "upstreamJwks"
