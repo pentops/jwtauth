@@ -1,0 +1,80 @@
+name: Docker
+on: [push]
+
+jobs:
+  define-matrix:
+    runs-on: ubuntu-latest
+
+    outputs:
+      images: ${{ steps.images.outputs.images }}
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Define Images
+        id: images
+        env:
+          DEFAULT_NAME: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          ls Dockerfile* \
+          | jq -R -s -c '
+            split("\n")[:-1]
+            | map({
+                "name": (
+                  if . == "Dockerfile"
+                  then env.DEFAULT_NAME
+                  else ( env.OWNER + "/" + ltrimstr("Dockerfile.") )
+                  end
+                ),
+                "file": .
+              }) ' \
+          | awk '{print "images="$1}' \
+          >> "$GITHUB_OUTPUT"
+
+  push_to_registries:
+    needs: define-matrix
+    strategy:
+      matrix:
+        image: ${{ fromJSON(needs.define-matrix.outputs.images) }}
+
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: ghcr.io/${{ matrix.image.name }}
+          tags: |
+            type=sha,format=long,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker images
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        with:
+          context: .
+          push: true
+          file: ${{ matrix.image.file }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{github.sha}}
