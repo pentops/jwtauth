@@ -62,5 +62,4 @@ func (ss *Verifier) Verify(ctx context.Context, rawKey string, into interface{})
 	}
 
 	return nil
-
 }
