@@ -166,8 +166,7 @@ func (km *JWKSManager) mergeKeys() {
 	keys := make([]jose.JSONWebKey, 0, 1)
 
 	for _, server := range km.servers {
-		serverKeys := server.Keys()
-		keys = append(keys, serverKeys...)
+		keys = append(keys, server.Keys()...)
 	}
 
 	keySet := jose.JSONWebKeySet{
@@ -178,23 +177,25 @@ func (km *JWKSManager) mergeKeys() {
 	if err != nil {
 		return
 	}
+
 	km.jwksBytes = keyBytes
 }
 
 func (km *JWKSManager) JWKS() []byte {
 	km.jwksMutex.RLock()
 	defer km.jwksMutex.RUnlock()
+
 	return km.jwksBytes
 }
 
 func (km *JWKSManager) GetKeys(keyID string) ([]jose.JSONWebKey, error) {
 	km.mutex.RLock()
 	defer km.mutex.RUnlock()
+
 	keys := make([]jose.JSONWebKey, 0, 1)
 
 	for _, server := range km.servers {
-		serverKeys := server.Keys()
-		for _, key := range serverKeys {
+		for _, key := range server.Keys() {
 			if key.KeyID == keyID {
 				keys = append(keys, key)
 			}
@@ -259,8 +260,7 @@ func (km *JWKSManager) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	jwksBytes := km.JWKS()
-	_, err := w.Write(jwksBytes)
+	_, err := w.Write(km.JWKS())
 	if err != nil {
 		log.WithError(req.Context(), err).Error("Failed to write JWKS Response")
 	}
