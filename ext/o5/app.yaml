@@ -2,7 +2,7 @@
 name: "jwks"
 
 secrets:
-  - name: 'conf'
+  - name: 'keys'
 
 runtimes:
   - name: main
@@ -25,7 +25,7 @@ runtimes:
 
           - name: "PRIVATE_KEY"
             secret:
-              secretName: "conf"
+              secretName: "keys"
               jsonKey: "privateKey"
 
           - name: "UPSTREAM_JWKS"
