@@ -39,25 +39,32 @@ func runGeneratePrivateKey(ctx context.Context, cfg struct{}) error {
 
 func runServer(ctx context.Context, cfg struct {
 	JWKSAddr     string   `env:"JWKS_ADDR" default:":8081"`
-	PrivateKey   string   `env:"PRIVATE_KEY"`
+	PrivateKey   string   `env:"PRIVATE_KEY" required:"false"`
 	UpstreamJWKS []string `env:"UPSTREAM_JWKS" default:""`
 }) error {
-	privateKey, err := keys.ParsePrivateKey(ctx, cfg.PrivateKey)
-	if err != nil {
-		return err
-	}
-
-	publicKey := privateKey.Public()
 	manager := jwks.NewKeyManager()
 
-	err = manager.AddSourceURLs(cfg.UpstreamJWKS...)
+	if len(cfg.UpstreamJWKS) == 0 && cfg.PrivateKey == "" {
+		return fmt.Errorf("no upstream JWKS URLs or private key provided")
+	}
+
+	err := manager.AddSourceURLs(cfg.UpstreamJWKS...)
 	if err != nil {
 		return fmt.Errorf("failed to add source URLs: %w", err)
 	}
 
-	err = manager.AddPublicKeys(publicKey)
-	if err != nil {
-		return fmt.Errorf("failed to add public keys: %w", err)
+	if cfg.PrivateKey != "" {
+		privateKey, err := keys.ParsePrivateKey(ctx, cfg.PrivateKey)
+		if err != nil {
+			return err
+		}
+
+		publicKey := privateKey.Public()
+
+		err = manager.AddPublicKeys(publicKey)
+		if err != nil {
+			return fmt.Errorf("failed to add public keys: %w", err)
+		}
 	}
 
 	runGroup := runner.NewGroup(runner.WithCancelOnSignals())
