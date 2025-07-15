@@ -2,13 +2,16 @@ package grpcjwt
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/pentops/log.go/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"gopkg.in/square/go-jose.v2"
 )
 
 type JWKS interface {
@@ -23,6 +26,8 @@ const (
 
 	VerifiedJWTHeader = "X-Verified-JWT"
 )
+
+var ValidSignatureAlgorithms = []jose.SignatureAlgorithm{jose.EdDSA}
 
 type AuthFunc func(context.Context, *http.Request) (map[string]string, error)
 
@@ -39,7 +44,7 @@ func JWKSAuthFunc(jwks JWKS) AuthFunc {
 
 		token := strings.TrimPrefix(authHeader, "Bearer ")
 
-		sig, err := jose.ParseSigned(token)
+		sig, err := jose.ParseSigned(token, ValidSignatureAlgorithms)
 		if err != nil {
 			log.WithError(ctx, err).Error("parsing token")
 			return nil, status.Error(codes.Unauthenticated, InvalidTokenFormatMessage)
@@ -73,6 +78,16 @@ func JWKSAuthFunc(jwks JWKS) AuthFunc {
 
 		if verifiedBytes == nil {
 			return nil, status.Error(codes.Unauthenticated, "invalid signature")
+		}
+
+		claim := &jwt.Claims{}
+		if err := json.Unmarshal(verifiedBytes, claim); err != nil {
+			log.WithError(ctx, err).Error("Failed to unmarshal claim (primary)")
+			return nil, status.Errorf(codes.Unauthenticated, "Bad Auth")
+		}
+
+		if claim.Expiry.Time().Before(time.Now()) {
+			return nil, status.Errorf(codes.Unauthenticated, "JWT is Expired %s", claim.Expiry.Time().Format(time.RFC3339))
 		}
 
 		return map[string]string{

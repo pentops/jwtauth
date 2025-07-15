@@ -5,8 +5,8 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 
+	"github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
-	"gopkg.in/square/go-jose.v2"
 )
 
 const (

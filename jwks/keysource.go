@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-jose/go-jose/v4"
 	"github.com/pentops/log.go/log"
 	"github.com/pquerna/cachecontrol/cacheobject"
-	"gopkg.in/square/go-jose.v2"
 )
 
 type KeySource interface {

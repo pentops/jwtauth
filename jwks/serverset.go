@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-jose/go-jose/v4"
 	"github.com/pentops/log.go/log"
 	"golang.org/x/sync/errgroup"
-	"gopkg.in/square/go-jose.v2"
 )
 
 // JWKSManager merges multiple JWKS sources

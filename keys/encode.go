@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"gopkg.in/square/go-jose.v2"
+	"github.com/go-jose/go-jose/v4"
 )
 
 func ParsePrivateKey(ctx context.Context, encKey string) (*jose.JSONWebKey, error) {

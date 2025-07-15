@@ -11,13 +11,14 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
 	"github.com/pentops/log.go/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"gopkg.in/square/go-jose.v2"
-	"gopkg.in/square/go-jose.v2/jwt"
 )
 
 type testJWKS struct {
@@ -41,7 +42,7 @@ func sign(t testing.TB, privateKey *jose.JSONWebKey, claims *jwt.Claims) string 
 	str, err := jwt.
 		Signed(signer).
 		Claims(claims).
-		CompactSerialize()
+		Serialize()
 
 	if err != nil {
 		t.Fatal(err.Error())
@@ -117,7 +118,7 @@ func TestMiddleware(t *testing.T) {
 		for _, attr := range attrs {
 			fields[attr.Key] = attr.Value.Any()
 		}
-		t.Logf("%s: %s   %v", level, msg, fields)
+		t.Logf("(Log) %s: %s   %v", level, msg, fields)
 	})
 
 	mock := &testJWKS{}
@@ -143,6 +144,7 @@ func TestMiddleware(t *testing.T) {
 	claims := &jwt.Claims{
 		Issuer:  "me",
 		Subject: "you",
+		Expiry:  jwt.NewNumericDate(time.Now().Add(time.Minute * 10)),
 	}
 	signed := sign(t, key, claims)
 
