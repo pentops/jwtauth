@@ -1,4 +1,4 @@
-package grpcjwt
+package httpjwt
 
 import (
 	"context"
