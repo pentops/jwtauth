@@ -10,16 +10,19 @@ permissions:
   contents: read
 
 jobs:
-  golangci:
-    name: lint
+  lint:
+    name: Linting
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+      - uses: actions/setup-go@v5
         with:
-          version: v1.64
+          go-version: stable
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.0
           args: --timeout=5m

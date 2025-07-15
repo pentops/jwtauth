@@ -1,28 +1,35 @@
----
-
+version: "2"
 run:
   tests: true
-
 linters:
   enable:
-    - errcheck
-    - gofmt
-    - gosimple
-    - govet
-    - ineffassign
+    - asciicheck
+    - bidichk
+    - gocheckcompilerdirectives
     - misspell
     - rowserrcheck
     - sqlclosecheck
-    - staticcheck
-    - typecheck
-    - unused
   disable:
-    - wsl
-    - prealloc
     - gochecknoglobals
-  disable-all: false
-  presets:
-    - bugs
-    - unused
-  fast: true
-
+    - prealloc
+    - wsl
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

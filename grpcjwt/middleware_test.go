@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -111,7 +112,11 @@ func reqWithHeaders(params ...string) *http.Request {
 
 func TestMiddleware(t *testing.T) {
 
-	log.DefaultLogger = log.NewCallbackLogger(func(level string, msg string, fields map[string]interface{}) {
+	log.DefaultLogger = log.NewCallbackLogger(func(level string, msg string, attrs []slog.Attr) {
+		fields := make(map[string]any, len(attrs))
+		for _, attr := range attrs {
+			fields[attr.Key] = attr.Value.Any()
+		}
 		t.Logf("%s: %s   %v", level, msg, fields)
 	})
 

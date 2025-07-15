@@ -19,7 +19,7 @@ type Verifier struct {
 	SigningKeys    jose.JSONWebKeySet
 }
 
-func (ss *Verifier) Verify(ctx context.Context, rawKey string, into interface{}) error {
+func (ss *Verifier) Verify(ctx context.Context, rawKey string, into any) error {
 	sig, err := jose.ParseSigned(rawKey)
 	if err != nil {
 		return status.Error(codes.Unauthenticated, "Invalid JWT")

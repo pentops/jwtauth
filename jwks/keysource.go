@@ -91,7 +91,7 @@ func (ss *HTTPKeySource) Refresh(ctx context.Context) (time.Duration, error) {
 	keyset := &jose.JSONWebKeySet{}
 
 	if err := json.Unmarshal(bodyBytes, keyset); err != nil {
-		return 0, fmt.Errorf("Parsing %s: %w", ss.url, err)
+		return 0, fmt.Errorf("parsing %s: %w", ss.url, err)
 	}
 
 	refreshTime := parseCacheControlHeader(res.Header.Get("Cache-Control"))
@@ -116,7 +116,7 @@ func (ss *HTTPKeySource) Refresh(ctx context.Context) (time.Duration, error) {
 		}
 	}
 	if changed {
-		log.WithFields(ctx, map[string]interface{}{
+		log.WithFields(ctx, map[string]any{
 			"oldKeys": ss.keyset.Keys,
 			"newKeys": keyIDs,
 			"url":     ss.url,

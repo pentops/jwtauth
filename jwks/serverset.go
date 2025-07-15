@@ -61,15 +61,15 @@ func (km *JWKSManager) AddSourceURLs(urls ...string) error {
 
 func keyIsValidForJWKS(key jose.JSONWebKey) error {
 	if key.KeyID == "" {
-		return fmt.Errorf("Key has no key ID")
+		return fmt.Errorf("key has no key ID")
 	}
 
 	if !key.Valid() {
-		return fmt.Errorf("Key %s is not valid", key.KeyID)
+		return fmt.Errorf("key %s is not valid", key.KeyID)
 	}
 
 	if !key.IsPublic() {
-		return fmt.Errorf("Key %s is not public", key.KeyID)
+		return fmt.Errorf("key %s is not public", key.KeyID)
 	}
 
 	return nil
@@ -78,7 +78,7 @@ func keyIsValidForJWKS(key jose.JSONWebKey) error {
 func (km *JWKSManager) AddPublicKeys(keys ...jose.JSONWebKey) error {
 	for idx, key := range keys {
 		if err := keyIsValidForJWKS(key); err != nil {
-			return fmt.Errorf("Key %d: %w", idx, err)
+			return fmt.Errorf("key %d: %w", idx, err)
 		}
 	}
 
@@ -117,7 +117,6 @@ func (km *JWKSManager) Run(ctx context.Context) error {
 
 	eg, ctx := errgroup.WithContext(ctx)
 	for _, server := range km.servers {
-		server := server
 		initGroup.Add(1)
 		eg.Go(func() error {
 			var duration time.Duration
@@ -211,7 +210,7 @@ type KeySummary struct {
 }
 
 // KeySummary is designed to be used in log messages for debugging exceptions
-func (km *JWKSManager) KeyDebug() interface{} {
+func (km *JWKSManager) KeyDebug() any {
 	km.mutex.RLock()
 	defer km.mutex.RUnlock()
 	keys := make([]KeySummary, 0, 1)
