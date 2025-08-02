@@ -23,6 +23,9 @@ const (
 	InvalidAuthHeaderMessage  = "invalid authorization header, must begin with 'Bearer '"
 	InvalidTokenFormatMessage = "invalid token format in authorization header, must be JWT"
 	NoTrustedKeyMessage       = "A valid JWT was found, however it was not signed by any trusted key"
+	ExpiredJWTMessage         = "JWT expired at %s"
+	FailedToUnmarshalMessage  = "failed to unmarshal JWT claim, please check the token format"
+	InvalidSignatureMessage   = "invalid signature in JWT, please check the token format"
 
 	VerifiedJWTHeader = "X-Verified-JWT"
 )
@@ -77,17 +80,17 @@ func JWKSAuthFunc(jwks JWKS) AuthFunc {
 		}
 
 		if verifiedBytes == nil {
-			return nil, status.Error(codes.Unauthenticated, "invalid signature")
+			return nil, status.Error(codes.Unauthenticated, InvalidSignatureMessage)
 		}
 
 		claim := &jwt.Claims{}
 		if err := json.Unmarshal(verifiedBytes, claim); err != nil {
 			log.WithError(ctx, err).Error("Failed to unmarshal claim (primary)")
-			return nil, status.Errorf(codes.Unauthenticated, "Bad Auth")
+			return nil, status.Errorf(codes.Unauthenticated, FailedToUnmarshalMessage)
 		}
 
 		if claim.Expiry.Time().Before(time.Now()) {
-			return nil, status.Errorf(codes.Unauthenticated, "JWT is Expired %s", claim.Expiry.Time().Format(time.RFC3339))
+			return nil, status.Errorf(codes.Unauthenticated, ExpiredJWTMessage, claim.Expiry.Time().Format(time.RFC3339))
 		}
 
 		return map[string]string{

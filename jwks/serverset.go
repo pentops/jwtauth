@@ -1,10 +1,14 @@
 package jwks
 
 import (
+	"bytes"
 	"context"
+	"crypto"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -187,21 +191,52 @@ func (km *JWKSManager) JWKS() []byte {
 	return km.jwksBytes
 }
 
+func keysMatch(a, b jose.JSONWebKey) bool {
+	if a.KeyID != b.KeyID {
+		return false
+	}
+
+	if a.Algorithm != b.Algorithm {
+		return false
+	}
+
+	thumbA, err := a.Thumbprint(crypto.SHA1)
+	if err != nil {
+		return false
+	}
+
+	thumbB, err := b.Thumbprint(crypto.SHA1)
+	if err != nil {
+		return false
+	}
+
+	if !bytes.Equal(thumbA, thumbB) {
+		return false
+	}
+	return true
+}
 func (km *JWKSManager) GetKeys(keyID string) ([]jose.JSONWebKey, error) {
 	km.mutex.RLock()
 	defer km.mutex.RUnlock()
 
-	keys := make([]jose.JSONWebKey, 0, 1)
+	keysByID := make(map[string]jose.JSONWebKey)
 
 	for _, server := range km.servers {
 		for _, key := range server.Keys() {
 			if key.KeyID == keyID {
-				keys = append(keys, key)
+				if existingKey, exists := keysByID[key.KeyID]; exists {
+					if !keysMatch(existingKey, key) {
+						return nil, fmt.Errorf("key %s exists with different properties", key.KeyID)
+					}
+					continue
+				}
+
+				keysByID[key.KeyID] = key
 			}
 		}
 	}
 
-	return keys, nil
+	return slices.Collect(maps.Values(keysByID)), nil
 }
 
 type KeySummary struct {
